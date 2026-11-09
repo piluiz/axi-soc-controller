@@ -51,12 +51,12 @@ jobs:
             echo '```'
           } >> "$GITHUB_STEP_SUMMARY"
 
-          if grep -q "^ERROR" synth.log; then
+          if grep -q "ERROR" synth.log; then
             # Annotations are visible without signing in to GitHub
-            grep -n -B2 "^ERROR" synth.log | head -n 20 | while IFS= read -r line; do
+            grep -n -B2 "ERROR" synth.log | head -n 20 | while IFS= read -r line; do
               echo "::error title=Yosys (${{ matrix.top }})::$line"
             done
-            grep -B2 "^ERROR" synth.log >> "$GITHUB_STEP_SUMMARY"
+            grep -B2 "ERROR" synth.log >> "$GITHUB_STEP_SUMMARY"
           else
             # Resource usage of the top module
             stats=$(awk '/Printing statistics/{p=1} p' synth.log | grep -E "Number of (cells|wires|wire bits)|\\$_" | head -n 25)
@@ -76,7 +76,7 @@ jobs:
 
       - name: Upload synthesis log
         if: always()
-        uses: actions/upload-artifact@v5
+        uses: actions/upload-artifact@v6
         with:
           name: synth-log-${{ matrix.top }}
           path: synth.log

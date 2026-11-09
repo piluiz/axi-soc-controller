@@ -42,7 +42,7 @@ output reg [9:0] tb_WriteTransactionID;
 
 reg [2:0] read_state;
 reg [3:0] write_state;
-reg DEBUG;
+localparam DEBUG = 0;  // Set to 1 for verbose simulation output
 
 assign {qr_HoldData, qr_ReadData, qr_Idle} = read_state;
 assign {qw_Response, qw_WriteData, qw_GetData, qw_Idle} = write_state;
@@ -78,8 +78,6 @@ begin
         RVALID <= 0;
         ReadOverflow <= 0;
 
-        // Used for debugging purposes
-        DEBUG <= 0;
     end
     else
         case(read_state)
@@ -195,8 +193,6 @@ begin
         BVALID <= 0;
         tb_LastWrite <= 0;
         WriteOverflow <= 0;
-        // Used for debugging purposes
-        DEBUG <= 0;
       end
     else
         case(write_state)
@@ -282,10 +278,13 @@ begin
               begin
                 $display("------SLAVE RESPONSE------\n");
                 $display("** MEMORY **\n");
+`ifndef SYNTHESIS
+                // Simulation-only memory dump (loop bound is not constant)
                 for(j = 0; j < debug_num_to_write; j = j + 1)
                   begin
                     $display("**Address: %d, Value: %d", debug_start_addy + j, ModuleMemory[j + debug_start_addy]);
                   end
+`endif
               end
 
             if(BREADY)

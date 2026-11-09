@@ -57,7 +57,7 @@ localparam R_IDLE = 4'b0001, R_ARVALID = 4'b0010, R_READREADY = 4'b0100, R_READ 
            W_WAITFORRESPONSE = 5'b10000;
 
 reg [3:0] NumAddressesLeft;
-reg DEBUG;
+localparam DEBUG = 0;  // Set to 1 for verbose simulation output
 
 // Master Read
 always @ (posedge clk, posedge reset)
@@ -70,8 +70,6 @@ begin
         tb_ReadValue <= 8'bx;
         ARVALID <= 0;
         RREADY <= 0;
-        // For debugging
-        DEBUG <= 0;
       end
     else
         case(read_state)
@@ -155,7 +153,6 @@ begin
         AWVALID <= 0;
         WLAST <= 0;
         WVALID <= 0;
-        DEBUG <= 0;
     end
     else
         case(write_state)

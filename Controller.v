@@ -292,7 +292,7 @@ localparam FIFO_NOTFULL = 3'b001, FIFO_GOTVALUE = 3'b010, FIFO_FULL = 3'b100, AL
            ALU_PROCESSTASK = 2'b10, MEMORY_FINDTASK = 2'b01, MEMORY_PROCESSTASK = 2'b10,
            IO_FINDTASK = 2'b01, IO_PROCESSTASK = 2'b10;
 
-reg DEBUG;
+localparam DEBUG = 0;  // Set to 1 for verbose simulation output
 output reg FIFO_IsEmpty;
 
 // Instruction buffer (FIFO)
@@ -310,7 +310,6 @@ begin
     read_pointer <= 5'b0;
     write_pointer <= 5'b0;
     FIFO_State <= FIFO_NOTFULL;
-    DEBUG <= 0;
     FIFO_IsEmpty <= 1;
   end
 

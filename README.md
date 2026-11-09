@@ -1,5 +1,7 @@
 # AXI-Style SoC Controller with Dependency-Aware Scheduling
 
+[![Simulation](https://github.com/pilarluiz/axi-soc-controller/actions/workflows/simulate.yml/badge.svg)](https://github.com/pilarluiz/axi-soc-controller/actions/workflows/simulate.yml)
+
 A Verilog SoC controller that accepts instructions into a 16-entry queue and dispatches them to three
 subordinate units (ALU, Memory, and I/O), each over its own AXI-style master/slave link.
 Instructions bound for different units run **out of order and in parallel**, while instructions that
@@ -94,6 +96,10 @@ vvp sim
 
 The design was originally developed and simulated in ModelSim. It also runs in the browser on
 [EDA Playground](https://www.edaplayground.com/).
+
+Every push runs the testbench on GitHub Actions
+([`.github/workflows/simulate.yml`](.github/workflows/simulate.yml)). The build fails if any check
+prints `[ERROR]` or the testbench doesn't run to completion, and the full log is saved with each run.
 
 ## Tests
 

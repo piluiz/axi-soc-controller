@@ -25,7 +25,7 @@ module slave_axi(
     BREADY, WDATA
 );
 
-input   clk, reset, ARVALID, RREADY, ARVALID, RREADY, WLAST, WVALID, BREADY, AWVALID;
+input   clk, reset, ARVALID, RREADY, WLAST, WVALID, BREADY, AWVALID;
 
 input [21:0] ARADDR;
 input [17:0] AWADDR;    // 8-bit address, 10 bit transaction id

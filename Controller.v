@@ -45,10 +45,8 @@ module controller(
     IO_tb_WriteTransactionID, FIFO_IsEmpty
 );
 
-input clk, reset, tb_IsNewInstruction, ALU_ARREADY, ALU_RVALID, ALU_AWREADY, ALU_WREADY, ALU_BRESP,
-      ALU_BVALID, ALU_tb_LastWrite, ALU_RLAST, dependency_test, Memory_ARREADY, Memory_RVALID,
-      Memory_AWREADY, Memory_WREADY, Memory_BRESP, Memory_BVALID, Memory_tb_LastWrite, Memory_RLAST,
-      IO_ARREADY, IO_RVALID, IO_AWREADY, IO_WREADY, IO_BRESP, IO_BVALID, IO_tb_LastWrite, IO_RLAST;
+input clk, reset, tb_IsNewInstruction, dependency_test;
+input ALU_tb_LastWrite, Memory_tb_LastWrite, IO_tb_LastWrite;
 
 // 8-bits[29:22]: Value
 // 8-bits[21:14]: Address
@@ -58,17 +56,14 @@ input clk, reset, tb_IsNewInstruction, ALU_ARREADY, ALU_RVALID, ALU_AWREADY, ALU
 // 1-bit[0]: Done? (0 = No, 1 = Yes)
 input [29:0] tb_NewInstruction;
 
-input [7:0] ALU_RDATA;
 input [7:0] ALU_tb_WriteValue;
 input [7:0] ALU_tb_WriteAddress;
 input [9:0] ALU_tb_WriteTransactionID;
 
-input [7:0] Memory_RDATA;
 input [7:0] Memory_tb_WriteValue;
 input [7:0] Memory_tb_WriteAddress;
 input [9:0] Memory_tb_WriteTransactionID;
 
-input [7:0] IO_RDATA;
 input [7:0] IO_tb_WriteValue;
 input [7:0] IO_tb_WriteAddress;
 input [9:0] IO_tb_WriteTransactionID;

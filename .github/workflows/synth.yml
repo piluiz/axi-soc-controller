@@ -20,7 +20,7 @@ jobs:
           - top: slave_axi
             files: Slave.v
           - top: controller
-            files: Controller.v Master.v
+            files: Controller.v Scheduler.v Master.v
 
     steps:
       - name: Check out repository

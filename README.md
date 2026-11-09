@@ -60,6 +60,20 @@ The result:
 
 The units model different latencies with a counter: about 9 cycles for the ALU, 19 for Memory, and 29 for I/O.
 
+### Hardware structure
+
+The controller is written to synthesize, not just simulate:
+
+- **One writer for the buffer.** Only the queue logic writes the instruction buffer. A scheduler
+  reports a finished task with a one-cycle `done` pulse and the entry's slot number.
+- **Shared, fixed-size ready check.** For each of the 16 queue positions, `ready` is "holds an
+  unfinished instruction, and no older unfinished instruction has the same ID". That is a fixed
+  16 x 16 grid of 10-bit ID comparators, computed once and shared by all three schedulers, since the
+  blocking rule doesn't depend on the unit.
+- **Priority encoder per unit.** Each `unit_scheduler` picks the oldest ready position whose unit
+  code matches its own. The module is instantiated three times with different `UNIT` and
+  `LATENCY` parameters.
+
 ### AXI-style interface
 
 `master_axi` and `slave_axi` implement the five AXI channels (read address, read data, write
@@ -79,7 +93,8 @@ spec-compliant AXI4 or AXI4-Lite interface.
 
 | File           | Description                                              |
 |----------------|----------------------------------------------------------|
-| `Controller.v` | `controller`: instruction buffer, three schedulers, three `master_axi` instances |
+| `Controller.v` | `controller`: instruction buffer, shared ready check, three `unit_scheduler` instances |
+| `Scheduler.v`  | `unit_scheduler`: picks the oldest ready task for one unit and drives its `master_axi` |
 | `Master.v`     | `master_axi`: read and write state machines              |
 | `Slave.v`      | `slave_axi`: 256 x 8-bit memory with burst and overflow handling |
 | `Testbench.v`  | `controller_tb_v`: self-checking testbench with three slaves |
@@ -90,7 +105,7 @@ spec-compliant AXI4 or AXI4-Lite interface.
 With [Icarus Verilog](https://steveicarus.github.io/iverilog/):
 
 ```sh
-iverilog -o sim Controller.v Master.v Slave.v Testbench.v
+iverilog -o sim Controller.v Scheduler.v Master.v Slave.v Testbench.v
 vvp sim
 ```
 
@@ -150,12 +165,9 @@ tests and 1,000 random burst requests):
 
 ## Limitations and future work
 
-- **Simulation-oriented:** the instruction buffer is written from several `always` blocks, and the
-  schedulers use unbounded `for` loops in clocked logic. Synthesizing it would require a single owner
-  for the buffer, with schedulers sending done requests to it.
+- **Slave memory as registers:** `slave_axi` clears its 256-byte memory on reset, so synthesis builds
+  it from flip-flops instead of a RAM block. Initializing it at power-up instead would allow a RAM.
 - **Fixed-latency completion:** a task is marked done after its unit's delay counter expires, not
   when the AXI write response or the last read beat arrives.
 - **Single-beat dispatch:** the controller issues single-beat reads and writes. Bursts are
   supported by the master and slave but not exposed through the instruction format.
-- **Repeated code:** the three schedulers are nearly identical and could become one parameterized
-  module.

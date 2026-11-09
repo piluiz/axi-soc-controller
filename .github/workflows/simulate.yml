@@ -21,7 +21,7 @@ jobs:
           iverilog -V 2>&1 | head -n 1
 
       - name: Compile
-        run: iverilog -o sim Controller.v Master.v Slave.v Testbench.v
+        run: iverilog -o sim Controller.v Scheduler.v Master.v Slave.v Testbench.v
 
       - name: Run testbench
         run: timeout 300 vvp -n sim | tee sim.log

@@ -5,8 +5,12 @@ on:
   pull_request:
   workflow_dispatch:
 
+env:
+  RTL: Controller.v Scheduler.v Master.v Slave.v
+
 jobs:
   simulate:
+    name: directed tests
     runs-on: ubuntu-24.04
     timeout-minutes: 10
 
@@ -21,7 +25,7 @@ jobs:
           iverilog -V 2>&1 | head -n 1
 
       - name: Compile
-        run: iverilog -o sim Controller.v Scheduler.v Master.v Slave.v Testbench.v
+        run: iverilog -o sim $RTL tests/Testbench.v
 
       - name: Run testbench
         run: timeout 300 vvp -n sim | tee sim.log
@@ -69,3 +73,59 @@ jobs:
         with:
           name: simulation-log
           path: sim.log
+
+  stress:
+    name: stress (latency ${{ matrix.alu }}/${{ matrix.mem }}/${{ matrix.io }}, seed ${{ matrix.seed }})
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # Different unit speeds (the default configuration)
+          - { alu: 4, mem: 14, io: 24, seed: 1, ids: 6 }
+          # Equal speeds: most simultaneous completions
+          - { alu: 0, mem: 0, io: 0, seed: 2, ids: 16 }
+          # Staggered so back-to-back tasks on different units finish together
+          - { alu: 4, mem: 2, io: 0, seed: 3, ids: 3 }
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v5
+
+      - name: Install Icarus Verilog
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y iverilog
+
+      - name: Compile
+        run: |
+          iverilog -o stress \
+            -P controller_stress_tb.ALU_LAT=${{ matrix.alu }} \
+            -P controller_stress_tb.MEM_LAT=${{ matrix.mem }} \
+            -P controller_stress_tb.IO_LAT=${{ matrix.io }} \
+            $RTL tests/Stress_tb.v
+
+      - name: Run stress test
+        run: timeout 300 vvp -n stress +seed=${{ matrix.seed }} +ids=${{ matrix.ids }} | tee stress.log
+
+      - name: Check results
+        run: |
+          summary=$(sed -n '/Stress summary/,$p' stress.log | grep -v '\$finish')
+          { echo "## Stress test"; echo '```'; echo "$summary"; echo '```'; } >> "$GITHUB_STEP_SUMMARY"
+          echo "::notice title=Stress summary::$(echo "$summary" | tr -s ' ' | tr '\n' ';')"
+
+          if grep -q "STRESS ERROR" stress.log; then
+            grep "STRESS ERROR" stress.log | head -n 10 | while IFS= read -r line; do
+              echo "::error title=Stress test::$line"
+            done
+          fi
+          grep -q "^STRESS PASS" stress.log
+
+      - name: Upload stress log
+        if: always()
+        uses: actions/upload-artifact@v6
+        with:
+          name: stress-log-${{ matrix.alu }}-${{ matrix.mem }}-${{ matrix.io }}-seed${{ matrix.seed }}
+          path: stress.log

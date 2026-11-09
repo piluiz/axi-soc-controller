@@ -1,0 +1,82 @@
+name: Synthesis
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  synthesize:
+    name: synth (${{ matrix.top }})
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - top: master_axi
+            files: Master.v
+          - top: slave_axi
+            files: Slave.v
+          - top: controller
+            files: Controller.v Master.v
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v5
+
+      - name: Install Yosys
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y yosys
+          yosys -V
+
+      - name: Synthesize ${{ matrix.top }}
+        run: |
+          set -o pipefail
+          yosys -l synth.log -p "
+            read_verilog ${{ matrix.files }};
+            hierarchy -check -top ${{ matrix.top }};
+            synth -top ${{ matrix.top }};
+            check;
+            stat;
+          " > /dev/null
+
+      - name: Report results
+        if: always()
+        run: |
+          {
+            echo "## Synthesis: ${{ matrix.top }}"
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+          if grep -q "^ERROR" synth.log; then
+            # Annotations are visible without signing in to GitHub
+            grep -n -B2 "^ERROR" synth.log | head -n 20 | while IFS= read -r line; do
+              echo "::error title=Yosys (${{ matrix.top }})::$line"
+            done
+            grep -B2 "^ERROR" synth.log >> "$GITHUB_STEP_SUMMARY"
+          else
+            # Resource usage of the top module
+            stats=$(awk '/Printing statistics/{p=1} p' synth.log | grep -E "Number of (cells|wires|wire bits)|\\$_" | head -n 25)
+            echo "$stats" >> "$GITHUB_STEP_SUMMARY"
+            echo "::notice title=Yosys stats (${{ matrix.top }})::$(echo "$stats" | tr -s ' ' | tr '\n' ';')"
+          fi
+
+          # Warnings often point at logic that won't match the simulation
+          warnings=$(grep -c "^Warning" synth.log || true)
+          echo "::notice title=Yosys warnings (${{ matrix.top }})::$warnings warning(s)"
+          grep "^Warning" synth.log | sort | uniq | head -n 8 | while IFS= read -r line; do
+            echo "::warning title=Yosys (${{ matrix.top }})::$line"
+          done
+          grep "^Warning" synth.log >> "$GITHUB_STEP_SUMMARY" || true
+
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload synthesis log
+        if: always()
+        uses: actions/upload-artifact@v5
+        with:
+          name: synth-log-${{ matrix.top }}
+          path: synth.log

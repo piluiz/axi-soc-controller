@@ -103,7 +103,6 @@ spec-compliant AXI4 or AXI4-Lite interface.
 | `Slave.v`      | `slave_axi`: 256 x 8-bit memory with burst and overflow handling |
 | `tests/Testbench.v` | `controller_tb_v`: directed tests with fixed expected values |
 | `tests/Stress_tb.v` | `controller_stress_tb`: randomized stress test that checks the scheduling rules |
-| `docs/`        | State machine diagrams and a simulation transcript       |
 
 ## Running the simulation
 
@@ -202,13 +201,6 @@ ALU Task Started:     R/W: 1, ID: 4     <- waits for Memory read ID 4
 ALU Task Complete:    R/W: 1, ID: 4
 ```
 
-### Master/slave results (Phase 1)
-
-Transcript from the standalone master/slave testbench used in the project's first phase (overflow
-tests and 1,000 random burst requests):
-
-![Phase 1 simulation transcript](docs/test_image.png)
-
 ## State machines
 
 All state machines are one-hot. Labels show the condition for a transition and, below it, the
@@ -294,19 +286,6 @@ stateDiagram-v2
     W_WRITEDATA --> W_RESPONSE : last beat<br/>store byte, set BRESP
     W_RESPONSE --> W_IDLE : BVALID (after LATENCY cycles) and BREADY<br/>BVALID = 0, AWREADY = 1
 ```
-
-<details>
-<summary>Original hand-drawn sketches (Phase 1)</summary>
-
-| Master read | Master write |
-|---|---|
-| ![Master read FSM](docs/Master_Read_FSM.PNG) | ![Master write FSM](docs/Master_Write_FSM.PNG) |
-
-| Slave read | Slave write |
-|---|---|
-| ![Slave read FSM](docs/Slave_Read_FSM.PNG) | ![Slave write FSM](docs/Slave_Write_FSM.PNG) |
-
-</details>
 
 ## Limitations and future work
 

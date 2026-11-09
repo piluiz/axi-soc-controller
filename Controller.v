@@ -216,7 +216,7 @@ end
 // One scheduler per unit
 // ---------------------------------------------------------------------------
 
-unit_scheduler #(.UNIT(2'd0), .LATENCY(9), .NAME("ALU")) ALU_Scheduler (
+unit_scheduler #(.UNIT(2'd0), .NAME("ALU")) ALU_Scheduler (
     .clk(clk), .reset(reset), .dependency_test(dependency_test),
     .entries(entries), .ready(ready), .read_ptr(head),
     .done(alu_done), .done_slot(alu_done_slot),
@@ -232,7 +232,7 @@ unit_scheduler #(.UNIT(2'd0), .LATENCY(9), .NAME("ALU")) ALU_Scheduler (
     .qw_WaitForResponse(ALU_qw_WaitForResponse)
 );
 
-unit_scheduler #(.UNIT(2'd1), .LATENCY(19), .NAME("Memory")) Memory_Scheduler (
+unit_scheduler #(.UNIT(2'd1), .NAME("Memory")) Memory_Scheduler (
     .clk(clk), .reset(reset), .dependency_test(dependency_test),
     .entries(entries), .ready(ready), .read_ptr(head),
     .done(mem_done), .done_slot(mem_done_slot),
@@ -251,7 +251,7 @@ unit_scheduler #(.UNIT(2'd1), .LATENCY(19), .NAME("Memory")) Memory_Scheduler (
     .qw_WaitForResponse(Memory_qw_WaitForResponse)
 );
 
-unit_scheduler #(.UNIT(2'd2), .LATENCY(29), .NAME("IO")) IO_Scheduler (
+unit_scheduler #(.UNIT(2'd2), .NAME("IO")) IO_Scheduler (
     .clk(clk), .reset(reset), .dependency_test(dependency_test),
     .entries(entries), .ready(ready), .read_ptr(head),
     .done(io_done), .done_slot(io_done_slot),

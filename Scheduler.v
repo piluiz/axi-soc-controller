@@ -7,9 +7,14 @@
  *   FINDTASK     Pick the oldest queue entry that is ready (see controller)
  *                and addressed to this unit, latch it, and start the AXI read
  *                or write on the master.
- *   PROCESSTASK  Hold the unit busy for LATENCY cycles to model the unit's
- *                latency. One cycle before the end, raise `done` with the
- *                entry's buffer slot so the controller can mark it complete.
+ *   PROCESSTASK  Wait for the AXI transfer to finish: the last read beat
+ *                (RVALID && RREADY && RLAST) or the write response
+ *                (BVALID && BREADY). In that cycle, raise `done` with the
+ *                entry's buffer slot so the controller can mark it complete,
+ *                and return to FINDTASK.
+ *
+ * Unit latency is modeled in the slave (slave_axi's LATENCY parameter), so a
+ * task is complete exactly when its data or write response has arrived.
  *
  * The scheduler never writes the instruction buffer itself. It only reports
  * completion, which keeps the buffer to a single driver (required for
@@ -18,9 +23,8 @@
 `timescale 1 ns / 100 ps
 
 module unit_scheduler #(
-    parameter [1:0] UNIT    = 2'd0,   // Unit code in instruction bits [13:12]
-    parameter       LATENCY = 9,      // Cycles a task occupies the unit
-    parameter       NAME    = "ALU"   // Label for simulation log messages
+    parameter [1:0] UNIT = 2'd0,   // Unit code in instruction bits [13:12]
+    parameter       NAME = "ALU"   // Label for simulation log messages
 ) (
     input clk,
     input reset,
@@ -57,12 +61,16 @@ module unit_scheduler #(
 localparam FINDTASK = 2'b01, PROCESSTASK = 2'b10;
 
 reg [1:0]  state;
-reg [4:0]  count;        // Cycles spent in PROCESSTASK (1..LATENCY)
 reg [3:0]  slot;         // Buffer slot of the task in progress
 reg [29:0] task_entry;   // Copy of the instruction in progress
 
+// The transfer for the task in progress has finished this cycle
+wire read_complete  = RVALID && RREADY && RLAST;   // Last read beat accepted
+wire write_complete = BVALID && BREADY;            // Write response accepted
+wire transfer_done  = task_entry[11] ? write_complete : read_complete;
+
 assign {q_processtask, q_findtask} = state;
-assign done      = (state == PROCESSTASK) && (count == LATENCY - 1);
+assign done      = (state == PROCESSTASK) && transfer_done;
 assign done_slot = slot;
 
 // Requests to the master
@@ -95,7 +103,6 @@ begin
     if (reset)
     begin
         state              <= FINDTASK;
-        count              <= 5'd0;
         slot               <= 4'd0;
         task_entry         <= 30'd0;
         ReadRequest        <= 1'b0;
@@ -115,7 +122,6 @@ begin
                 if (found)
                 begin
                     state      <= PROCESSTASK;
-                    count      <= 5'd1;
                     slot       <= read_ptr + pick;
                     task_entry <= pick_entry;
 
@@ -144,15 +150,13 @@ begin
 
             PROCESSTASK:
             begin
-                count <= count + 5'd1;
-
                 // Drop each request once the master has taken it
                 if (qr_ARValid)
                     ReadRequest <= 1'b0;
                 if (qw_AWValid)
                     WriteRequest <= 1'b0;
 
-                if (count == LATENCY)
+                if (transfer_done)
                 begin
                     state <= FINDTASK;
 `ifndef SYNTHESIS

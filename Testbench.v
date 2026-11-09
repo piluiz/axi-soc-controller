@@ -198,7 +198,8 @@ controller controller_uut(
 wire ALU_Slave_qw_Idle, ALU_Slave_qw_GetData, ALU_Slave_qw_WriteData, ALU_Slave_qw_Response,
      ALU_Slave_qr_Idle, ALU_Slave_qr_ReadData, ALU_Slave_qr_HoldData;
 
-slave_axi ALU_slave(
+// Unit latencies are modeled in the slaves: extra cycles before each response
+slave_axi #(.LATENCY(4)) ALU_slave(
     .clk(clk),
     .reset(reset),
     .ARADDR(ALU_ARADDR),
@@ -236,7 +237,7 @@ wire Memory_Slave_qw_Idle, Memory_Slave_qw_GetData, Memory_Slave_qw_WriteData,
      Memory_Slave_qw_Response, Memory_Slave_qr_Idle, Memory_Slave_qr_ReadData,
      Memory_Slave_qr_HoldData;
 
-slave_axi Memory_slave(
+slave_axi #(.LATENCY(14)) Memory_slave(
     .clk(clk),
     .reset(reset),
     .ARADDR(Memory_ARADDR),
@@ -273,7 +274,7 @@ slave_axi Memory_slave(
 wire IO_Slave_qw_Idle, IO_Slave_qw_GetData, IO_Slave_qw_WriteData, IO_Slave_qw_Response,
      IO_Slave_qr_Idle, IO_Slave_qr_ReadData, IO_Slave_qr_HoldData;
 
-slave_axi IO_slave(
+slave_axi #(.LATENCY(24)) IO_slave(
     .clk(clk),
     .reset(reset),
     .ARADDR(IO_ARADDR),

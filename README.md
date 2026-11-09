@@ -1,6 +1,7 @@
 # AXI-Style SoC Controller with Dependency-Aware Scheduling
 
 [![Simulation](https://github.com/piluiz/axi-soc-controller/actions/workflows/simulate.yml/badge.svg)](https://github.com/piluiz/axi-soc-controller/actions/workflows/simulate.yml)
+[![Synthesis](https://github.com/piluiz/axi-soc-controller/actions/workflows/synth.yml/badge.svg)](https://github.com/piluiz/axi-soc-controller/actions/workflows/synth.yml)
 
 A Verilog SoC controller that accepts instructions into a 16-entry queue and dispatches them to three
 subordinate units (ALU, Memory, and I/O), each over its own AXI-style master/slave link.
@@ -58,7 +59,10 @@ The result:
 - Finished entries are marked done in place, and the read pointer advances past the finished
   entries at the head of the queue, so slots are reclaimed in order.
 
-The units model different latencies with a counter: about 9 cycles for the ALU, 19 for Memory, and 29 for I/O.
+A task is complete when its AXI transfer finishes: the last read beat (`RVALID && RREADY && RLAST`)
+or the write response (`BVALID && BREADY`). Unit latency is modeled in the slaves, whose `LATENCY`
+parameter delays each response (4, 14, and 24 extra cycles for the ALU, Memory, and I/O in the
+testbench), so slower units hold their tasks longer.
 
 ### Hardware structure
 
@@ -167,7 +171,5 @@ tests and 1,000 random burst requests):
 
 - **Slave memory as registers:** `slave_axi` clears its 256-byte memory on reset, so synthesis builds
   it from flip-flops instead of a RAM block. Initializing it at power-up instead would allow a RAM.
-- **Fixed-latency completion:** a task is marked done after its unit's delay counter expires, not
-  when the AXI write response or the last read beat arrives.
 - **Single-beat dispatch:** the controller issues single-beat reads and writes. Bursts are
   supported by the master and slave but not exposed through the instruction format.

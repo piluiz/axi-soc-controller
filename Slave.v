@@ -15,6 +15,10 @@
  * Write response:
  *   BRESP[9:8] = 2'b01 (OK) or 2'b10 (WARN: address overflow)
  *   BRESP[7:0] = number of dropped beats when WARN
+ *
+ * Latency: the LATENCY parameter delays the first read beat (RVALID) and the
+ * write response (BVALID) by that many cycles, to model slower units. The
+ * default of 0 responds as soon as possible.
  */
 `timescale 1 ns / 100 ps
 
@@ -43,6 +47,10 @@ output reg [9:0] tb_WriteTransactionID;
 reg [2:0] read_state;
 reg [3:0] write_state;
 localparam DEBUG = 0;  // Set to 1 for verbose simulation output
+
+parameter LATENCY = 0;  // Extra cycles before RVALID / BVALID (max 255)
+reg [7:0] read_delay;   // Cycles left before the first read beat
+reg [7:0] resp_delay;   // Cycles left before the write response
 
 assign {qr_HoldData, qr_ReadData, qr_Idle} = read_state;
 assign {qw_Response, qw_WriteData, qw_GetData, qw_Idle} = write_state;
@@ -77,6 +85,7 @@ begin
         RLAST <= 0;
         RVALID <= 0;
         ReadOverflow <= 0;
+        read_delay <= 8'd0;
 
     end
     else
@@ -98,32 +107,39 @@ begin
                     NumAddressesLeft <= ARADDR[13:10];
                     ReadTransactionID <= ARADDR[9:0];
                     ARREADY <= 0;
+                    read_delay <= LATENCY;
                   end
               end
 
             R_READDATA:
             begin
-                if(DEBUG)
-                begin
-                    $display("Slave State: READ DATA\n");
-                end
-                RVALID <= 1;
-                if (ReadOverflow)
-                  begin
-                    // Send a dummy value if reading out of bounds
-                    RDATA <= 8'bxxxxxxxx;
-                  end
+                if (read_delay != 8'd0)
+                    // Model unit latency before the first beat
+                    read_delay <= read_delay - 8'd1;
                 else
-                  begin
+                begin
                     if(DEBUG)
-                        $display("~~~~~~Reading from memory address %d, value: %d", ReadAddress, ModuleMemory[ReadAddress]);
-                    RDATA <= ModuleMemory[ReadAddress];
-                  end
-                NumAddressesLeft <= NumAddressesLeft - 8'b1;
-                if (NumAddressesLeft == 8'b1)
-                    RLAST <= 1;
+                    begin
+                        $display("Slave State: READ DATA\n");
+                    end
+                    RVALID <= 1;
+                    if (ReadOverflow)
+                      begin
+                        // Send a dummy value if reading out of bounds
+                        RDATA <= 8'bxxxxxxxx;
+                      end
+                    else
+                      begin
+                        if(DEBUG)
+                            $display("~~~~~~Reading from memory address %d, value: %d", ReadAddress, ModuleMemory[ReadAddress]);
+                        RDATA <= ModuleMemory[ReadAddress];
+                      end
+                    NumAddressesLeft <= NumAddressesLeft - 8'b1;
+                    if (NumAddressesLeft == 8'b1)
+                        RLAST <= 1;
 
-                read_state <= R_HOLDDATA;
+                    read_state <= R_HOLDDATA;
+                end
             end
 
             R_HOLDDATA:
@@ -193,6 +209,7 @@ begin
         BVALID <= 0;
         tb_LastWrite <= 0;
         WriteOverflow <= 0;
+        resp_delay <= 8'd0;
       end
     else
         case(write_state)
@@ -252,7 +269,8 @@ begin
             if (tb_LastWrite)
               begin
                 write_state <= W_RESPONSE;
-                BVALID <= 1;
+                BVALID <= (LATENCY == 0);
+                resp_delay <= LATENCY;
                 if (WriteOverflow)
                   begin
                     // Warn
@@ -287,7 +305,15 @@ begin
 `endif
               end
 
-            if(BREADY)
+            if (!BVALID)
+              begin
+                // Model unit latency before the write response
+                if (resp_delay > 8'd1)
+                    resp_delay <= resp_delay - 8'd1;
+                else
+                    BVALID <= 1;
+              end
+            else if (BREADY)
               begin
                 write_state <= W_IDLE;
                 BVALID <= 0;

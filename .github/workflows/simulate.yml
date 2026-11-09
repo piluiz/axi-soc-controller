@@ -37,7 +37,16 @@ jobs:
             echo "| Passed checks | Failed checks |"
             echo "|---|---|"
             echo "| $ok | $errors |"
+            echo ""
+            echo "### Dependency test log"
+            echo '```'
+            grep "Task \(Started\|Complete\)" sim.log | sed 's/, Instruction:.*//' || true
+            echo '```'
           } >> "$GITHUB_STEP_SUMMARY"
+
+          # Annotations are readable without signing in to GitHub
+          echo "::notice title=Simulation checks::$ok passed, $errors failed"
+          echo "::notice title=Dependency test log::$(grep "Task \(Started\|Complete\)" sim.log | sed 's/, Instruction:.*//' | tr -s ' ' | tr '\n' ';')"
 
           if [ "$errors" -ne 0 ]; then
             echo "::error::$errors check(s) failed:"

@@ -1,6 +1,6 @@
 # AXI-Style SoC Controller with Dependency-Aware Scheduling
 
-[![Simulation](https://github.com/pilarluiz/axi-soc-controller/actions/workflows/simulate.yml/badge.svg)](https://github.com/pilarluiz/axi-soc-controller/actions/workflows/simulate.yml)
+[![Simulation](https://github.com/piluiz/axi-soc-controller/actions/workflows/simulate.yml/badge.svg)](https://github.com/piluiz/axi-soc-controller/actions/workflows/simulate.yml)
 
 A Verilog SoC controller that accepts instructions into a 16-entry queue and dispatches them to three
 subordinate units (ALU, Memory, and I/O), each over its own AXI-style master/slave link.

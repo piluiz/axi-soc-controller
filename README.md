@@ -211,6 +211,93 @@ tests and 1,000 random burst requests):
 
 ## State machines
 
+All state machines are one-hot. Labels show the condition for a transition and, below it, the
+outputs that change.
+
+### Controller
+
+**Instruction queue** (`controller`): accepts one instruction at a time from the testbench and
+reports when it is full.
+
+```mermaid
+stateDiagram-v2
+    direction LR
+    [*] --> NOTFULL : reset
+    NOTFULL --> GOTVALUE : tb_IsNewInstruction<br/>store entry, advance write pointer
+    GOTVALUE --> NOTFULL : fewer than 16 entries
+    GOTVALUE --> FULL : 16 entries
+    FULL --> NOTFULL : an entry retires
+```
+
+**Unit scheduler** (`unit_scheduler`, one per unit): issues the oldest ready instruction for its
+unit and waits for the AXI transfer to finish.
+
+```mermaid
+stateDiagram-v2
+    direction LR
+    [*] --> FINDTASK : reset
+    FINDTASK --> PROCESSTASK : oldest ready entry for this unit<br/>latch it, request the read or write
+    PROCESSTASK --> FINDTASK : transfer complete<br/>(last read beat, or write response)<br/>pulse done with the entry's slot
+```
+
+### AXI master (`master_axi`)
+
+**Read**
+
+```mermaid
+stateDiagram-v2
+    [*] --> R_IDLE : reset
+    R_IDLE --> R_ARVALID : tb_ReadRequest<br/>ARVALID = 1
+    R_ARVALID --> R_READREADY : ARREADY<br/>ARVALID = 0, RREADY = 1
+    R_READREADY --> R_READ : RVALID<br/>capture RDATA, RREADY = 0
+    R_READ --> R_READREADY : more beats<br/>RREADY = 1
+    R_READ --> R_IDLE : last beat
+```
+
+**Write**
+
+```mermaid
+stateDiagram-v2
+    [*] --> W_IDLE : reset
+    W_IDLE --> W_AWVALID : tb_WriteRequest<br/>AWVALID = 1
+    W_AWVALID --> W_GETDATATOWRITE : AWREADY<br/>AWVALID = 0
+    W_GETDATATOWRITE --> W_WRITE : tb_WriteDataValid<br/>drive WDATA and WLAST, WVALID = 1
+    W_WRITE --> W_GETDATATOWRITE : WREADY, more beats
+    W_WRITE --> W_WAITFORRESPONSE : WREADY and WLAST<br/>BREADY = 1
+    W_WAITFORRESPONSE --> W_IDLE : BVALID<br/>BREADY = 0
+```
+
+### AXI slave (`slave_axi`)
+
+`LATENCY` is the slave's response-delay parameter. Write beats past address `0xFF` are dropped
+and counted in `BRESP`.
+
+**Read**
+
+```mermaid
+stateDiagram-v2
+    [*] --> R_IDLE : reset
+    R_IDLE --> R_READDATA : ARVALID<br/>latch address, length, ID<br/>ARREADY = 0
+    R_READDATA --> R_HOLDDATA : after LATENCY cycles (first beat)<br/>drive RDATA, RVALID = 1<br/>RLAST on the final beat
+    R_HOLDDATA --> R_READDATA : RREADY, more beats<br/>RVALID = 0, next address
+    R_HOLDDATA --> R_IDLE : RREADY and RLAST<br/>RVALID = 0, ARREADY = 1
+```
+
+**Write**
+
+```mermaid
+stateDiagram-v2
+    [*] --> W_IDLE : reset
+    W_IDLE --> W_GETDATA : AWVALID<br/>latch address and ID, WREADY = 1
+    W_GETDATA --> W_WRITEDATA : WVALID<br/>latch WDATA and WLAST, WREADY = 0
+    W_WRITEDATA --> W_GETDATA : more beats<br/>store byte, next address, WREADY = 1
+    W_WRITEDATA --> W_RESPONSE : last beat<br/>store byte, set BRESP
+    W_RESPONSE --> W_IDLE : BVALID (after LATENCY cycles) and BREADY<br/>BVALID = 0, AWREADY = 1
+```
+
+<details>
+<summary>Original hand-drawn sketches (Phase 1)</summary>
+
 | Master read | Master write |
 |---|---|
 | ![Master read FSM](docs/Master_Read_FSM.PNG) | ![Master write FSM](docs/Master_Write_FSM.PNG) |
@@ -218,6 +305,8 @@ tests and 1,000 random burst requests):
 | Slave read | Slave write |
 |---|---|
 | ![Slave read FSM](docs/Slave_Read_FSM.PNG) | ![Slave write FSM](docs/Slave_Write_FSM.PNG) |
+
+</details>
 
 ## Limitations and future work
 

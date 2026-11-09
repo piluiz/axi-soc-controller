@@ -26,91 +26,94 @@
 
 `timescale 1 ns / 100 ps
 
-module controller(
-    clk, reset, tb_IsNewInstruction, tb_NewInstruction, ALU_AWVALID, ALU_WLAST, ALU_WVALID,
-    ALU_BREADY, ALU_ARVALID, ALU_RREADY, dependency_test, ALU_qr_Idle, ALU_qr_ARValid,
-    ALU_qr_ReadReady, ALU_qr_Read, ALU_qw_Idle, ALU_qw_AWValid, ALU_qw_GetDataToWrite, ALU_qw_Write,
-    ALU_qw_WaitForResponse, ALU_AWADDR, ALU_ARADDR, ALU_WDATA, ALU_tb_ReadValue, Memory_AWVALID,
-    Memory_WLAST, Memory_WVALID, Memory_BREADY, Memory_ARVALID, Memory_RREADY, Memory_qr_Idle,
-    Memory_qr_ARValid, Memory_qr_ReadReady, Memory_qr_Read, Memory_qw_Idle, Memory_qw_AWValid,
-    Memory_qw_GetDataToWrite, Memory_qw_Write, Memory_qw_WaitForResponse, Memory_AWADDR,
-    Memory_ARADDR, Memory_WDATA, Memory_tb_ReadValue, IO_AWVALID, IO_WLAST, IO_WVALID, IO_BREADY,
-    IO_ARVALID, IO_RREADY, IO_qr_Idle, IO_qr_ARValid, IO_qr_ReadReady, IO_qr_Read, IO_qw_Idle,
-    IO_qw_AWValid, IO_qw_GetDataToWrite, IO_qw_Write, IO_qw_WaitForResponse, IO_AWADDR, IO_ARADDR,
-    IO_WDATA, IO_tb_ReadValue, ALU_Q_FINDTASK, ALU_Q_PROCESSTASK, FIFO_Q_FULL, FIFO_Q_GOTVALUE,
-    FIFO_Q_NOTFULL, MEMORY_Q_FINDTASK, MEMORY_Q_PROCESSTASK, IO_Q_FINDTASK, IO_Q_PROCESSTASK,
-    ALU_ARREADY, ALU_RVALID, ALU_AWREADY, ALU_WREADY, ALU_BRESP, ALU_BVALID, ALU_tb_LastWrite,
-    ALU_RLAST, ALU_RDATA, ALU_tb_WriteValue, ALU_tb_WriteAddress, ALU_tb_WriteTransactionID,
-    Memory_ARREADY, Memory_RVALID, Memory_AWREADY, Memory_WREADY, Memory_BRESP, Memory_BVALID,
-    Memory_tb_LastWrite, Memory_RLAST, Memory_RDATA, Memory_tb_WriteValue, Memory_tb_WriteAddress,
-    Memory_tb_WriteTransactionID, IO_ARREADY, IO_RVALID, IO_AWREADY, IO_WREADY, IO_BRESP, IO_BVALID,
-    IO_tb_LastWrite, IO_RLAST, IO_RDATA, IO_tb_WriteValue, IO_tb_WriteAddress,
-    IO_tb_WriteTransactionID, FIFO_IsEmpty
+// Instruction format (tb_NewInstruction)
+//   [29:22] Value (writes)
+//   [21:14] Address
+//   [13:12] Unit: ALU (0), Memory (1), I/O (2)
+//   [11]    Read (0), Write (1)
+//   [10:1]  Transaction ID
+//   [0]     Done flag: ignored on input; completion is tracked in done_bits
+
+module controller (
+    input          clk,
+    input          reset,
+
+    // Instruction interface (from the testbench)
+    input          tb_IsNewInstruction,  // tb_NewInstruction is valid
+    input  [29:0]  tb_NewInstruction,    // See the instruction format above
+    input          dependency_test,      // Print task start/complete messages (simulation)
+
+    // Queue status (one-hot state) and empty flag
+    output         FIFO_Q_NOTFULL,       // Ready to accept an instruction
+    output         FIFO_Q_GOTVALUE,      // Instruction accepted at the last clock edge
+    output         FIFO_Q_FULL,          // Queue full: hold the instruction
+    output         FIFO_IsEmpty,         // Every instruction has completed and retired
+
+    // Scheduler state per unit (one-hot)
+    output         ALU_Q_FINDTASK,    ALU_Q_PROCESSTASK,
+    output         MEMORY_Q_FINDTASK, MEMORY_Q_PROCESSTASK,
+    output         IO_Q_FINDTASK,     IO_Q_PROCESSTASK,
+
+    // ALU: AXI-style master port
+    output         ALU_ARVALID,
+    input          ALU_ARREADY,
+    output [21:0]  ALU_ARADDR,           // {address[7:0], length[3:0], ID[9:0]}
+    input          ALU_RVALID,
+    output         ALU_RREADY,
+    input  [7:0]   ALU_RDATA,
+    input          ALU_RLAST,
+    output         ALU_AWVALID,
+    input          ALU_AWREADY,
+    output [17:0]  ALU_AWADDR,           // {address[7:0], ID[9:0]}
+    output         ALU_WVALID,
+    input          ALU_WREADY,
+    output [7:0]   ALU_WDATA,
+    output         ALU_WLAST,
+    input          ALU_BVALID,
+    output         ALU_BREADY,
+    input  [9:0]   ALU_BRESP,            // {status[1:0], overflow count[7:0]}; 01 = OK, 10 = WARN
+    output [7:0]   ALU_ReadValue,        // Most recent value read
+
+    // Memory: AXI-style master port
+    output         Memory_ARVALID,
+    input          Memory_ARREADY,
+    output [21:0]  Memory_ARADDR,        // {address[7:0], length[3:0], ID[9:0]}
+    input          Memory_RVALID,
+    output         Memory_RREADY,
+    input  [7:0]   Memory_RDATA,
+    input          Memory_RLAST,
+    output         Memory_AWVALID,
+    input          Memory_AWREADY,
+    output [17:0]  Memory_AWADDR,        // {address[7:0], ID[9:0]}
+    output         Memory_WVALID,
+    input          Memory_WREADY,
+    output [7:0]   Memory_WDATA,
+    output         Memory_WLAST,
+    input          Memory_BVALID,
+    output         Memory_BREADY,
+    input  [9:0]   Memory_BRESP,         // {status[1:0], overflow count[7:0]}; 01 = OK, 10 = WARN
+    output [7:0]   Memory_ReadValue,     // Most recent value read
+
+    // I/O: AXI-style master port
+    output         IO_ARVALID,
+    input          IO_ARREADY,
+    output [21:0]  IO_ARADDR,            // {address[7:0], length[3:0], ID[9:0]}
+    input          IO_RVALID,
+    output         IO_RREADY,
+    input  [7:0]   IO_RDATA,
+    input          IO_RLAST,
+    output         IO_AWVALID,
+    input          IO_AWREADY,
+    output [17:0]  IO_AWADDR,            // {address[7:0], ID[9:0]}
+    output         IO_WVALID,
+    input          IO_WREADY,
+    output [7:0]   IO_WDATA,
+    output         IO_WLAST,
+    input          IO_BVALID,
+    output         IO_BREADY,
+    input  [9:0]   IO_BRESP,             // {status[1:0], overflow count[7:0]}; 01 = OK, 10 = WARN
+    output [7:0]   IO_ReadValue          // Most recent value read
 );
-
-input clk, reset, tb_IsNewInstruction, dependency_test;
-
-// Instruction format
-// 8-bits[29:22]: Value
-// 8-bits[21:14]: Address
-// 2-bits[13:12]: ALU (0), Memory (1), I/O (2)
-// 1-bit[11]: Read (0), Write (1)
-// 10-bits[10:1]: Transaction ID
-// 1-bit[0]: Done? (ignored on input; completion is tracked in done_bits)
-input [29:0] tb_NewInstruction;
-
-// Slave-side monitor signals. These are part of the testbench wiring but are
-// not used by the controller.
-input       ALU_tb_LastWrite, Memory_tb_LastWrite, IO_tb_LastWrite;
-input [7:0] ALU_tb_WriteValue, Memory_tb_WriteValue, IO_tb_WriteValue;
-input [7:0] ALU_tb_WriteAddress, Memory_tb_WriteAddress, IO_tb_WriteAddress;
-input [9:0] ALU_tb_WriteTransactionID, Memory_tb_WriteTransactionID, IO_tb_WriteTransactionID;
-
-// ALU master interface
-input        ALU_ARREADY, ALU_RVALID, ALU_AWREADY, ALU_WREADY, ALU_BVALID, ALU_RLAST;
-input  [7:0] ALU_RDATA;
-input  [9:0] ALU_BRESP;   // {status[1:0], overflow count[7:0]}; status 01 = OK, 10 = WARN
-output       ALU_AWVALID, ALU_WLAST, ALU_WVALID, ALU_BREADY, ALU_ARVALID, ALU_RREADY;
-output       ALU_qr_Idle, ALU_qr_ARValid, ALU_qr_ReadReady, ALU_qr_Read, ALU_qw_Idle,
-             ALU_qw_AWValid, ALU_qw_GetDataToWrite, ALU_qw_Write, ALU_qw_WaitForResponse;
-output [17:0] ALU_AWADDR;   // 8-bit address, 10-bit transaction ID
-output [21:0] ALU_ARADDR;   // 8-bit address, 4-bit length, 10-bit transaction ID
-output [7:0]  ALU_WDATA;
-output [7:0]  ALU_tb_ReadValue;
-
-// Memory master interface
-input        Memory_ARREADY, Memory_RVALID, Memory_AWREADY, Memory_WREADY, Memory_BVALID,
-             Memory_RLAST;
-input  [7:0] Memory_RDATA;
-input  [9:0] Memory_BRESP;
-output       Memory_AWVALID, Memory_WLAST, Memory_WVALID, Memory_BREADY, Memory_ARVALID,
-             Memory_RREADY;
-output       Memory_qr_Idle, Memory_qr_ARValid, Memory_qr_ReadReady, Memory_qr_Read,
-             Memory_qw_Idle, Memory_qw_AWValid, Memory_qw_GetDataToWrite, Memory_qw_Write,
-             Memory_qw_WaitForResponse;
-output [17:0] Memory_AWADDR;
-output [21:0] Memory_ARADDR;
-output [7:0]  Memory_WDATA;
-output [7:0]  Memory_tb_ReadValue;
-
-// I/O master interface
-input        IO_ARREADY, IO_RVALID, IO_AWREADY, IO_WREADY, IO_BVALID, IO_RLAST;
-input  [7:0] IO_RDATA;
-input  [9:0] IO_BRESP;
-output       IO_AWVALID, IO_WLAST, IO_WVALID, IO_BREADY, IO_ARVALID, IO_RREADY;
-output       IO_qr_Idle, IO_qr_ARValid, IO_qr_ReadReady, IO_qr_Read, IO_qw_Idle,
-             IO_qw_AWValid, IO_qw_GetDataToWrite, IO_qw_Write, IO_qw_WaitForResponse;
-output [17:0] IO_AWADDR;
-output [21:0] IO_ARADDR;
-output [7:0]  IO_WDATA;
-output [7:0]  IO_tb_ReadValue;
-
-// Queue and scheduler state (one-hot)
-output FIFO_Q_NOTFULL, FIFO_Q_GOTVALUE, FIFO_Q_FULL;
-output ALU_Q_FINDTASK, ALU_Q_PROCESSTASK;
-output MEMORY_Q_FINDTASK, MEMORY_Q_PROCESSTASK;
-output IO_Q_FINDTASK, IO_Q_PROCESSTASK;
-output FIFO_IsEmpty;
 
 
 // ---------------------------------------------------------------------------
@@ -225,11 +228,7 @@ unit_scheduler #(.UNIT(2'd0), .NAME("ALU")) ALU_Scheduler (
     .WREADY(ALU_WREADY), .BVALID(ALU_BVALID), .RDATA(ALU_RDATA), .BRESP(ALU_BRESP),
     .AWVALID(ALU_AWVALID), .WLAST(ALU_WLAST), .WVALID(ALU_WVALID), .BREADY(ALU_BREADY),
     .ARVALID(ALU_ARVALID), .RREADY(ALU_RREADY), .AWADDR(ALU_AWADDR), .ARADDR(ALU_ARADDR),
-    .WDATA(ALU_WDATA), .tb_ReadValue(ALU_tb_ReadValue),
-    .qr_Idle(ALU_qr_Idle), .qr_ARValid(ALU_qr_ARValid), .qr_ReadReady(ALU_qr_ReadReady),
-    .qr_Read(ALU_qr_Read), .qw_Idle(ALU_qw_Idle), .qw_AWValid(ALU_qw_AWValid),
-    .qw_GetDataToWrite(ALU_qw_GetDataToWrite), .qw_Write(ALU_qw_Write),
-    .qw_WaitForResponse(ALU_qw_WaitForResponse)
+    .WDATA(ALU_WDATA), .ReadValue(ALU_ReadValue)
 );
 
 unit_scheduler #(.UNIT(2'd1), .NAME("Memory")) Memory_Scheduler (
@@ -243,12 +242,7 @@ unit_scheduler #(.UNIT(2'd1), .NAME("Memory")) Memory_Scheduler (
     .AWVALID(Memory_AWVALID), .WLAST(Memory_WLAST), .WVALID(Memory_WVALID),
     .BREADY(Memory_BREADY), .ARVALID(Memory_ARVALID), .RREADY(Memory_RREADY),
     .AWADDR(Memory_AWADDR), .ARADDR(Memory_ARADDR), .WDATA(Memory_WDATA),
-    .tb_ReadValue(Memory_tb_ReadValue),
-    .qr_Idle(Memory_qr_Idle), .qr_ARValid(Memory_qr_ARValid),
-    .qr_ReadReady(Memory_qr_ReadReady), .qr_Read(Memory_qr_Read),
-    .qw_Idle(Memory_qw_Idle), .qw_AWValid(Memory_qw_AWValid),
-    .qw_GetDataToWrite(Memory_qw_GetDataToWrite), .qw_Write(Memory_qw_Write),
-    .qw_WaitForResponse(Memory_qw_WaitForResponse)
+    .ReadValue(Memory_ReadValue)
 );
 
 unit_scheduler #(.UNIT(2'd2), .NAME("IO")) IO_Scheduler (
@@ -260,11 +254,7 @@ unit_scheduler #(.UNIT(2'd2), .NAME("IO")) IO_Scheduler (
     .WREADY(IO_WREADY), .BVALID(IO_BVALID), .RDATA(IO_RDATA), .BRESP(IO_BRESP),
     .AWVALID(IO_AWVALID), .WLAST(IO_WLAST), .WVALID(IO_WVALID), .BREADY(IO_BREADY),
     .ARVALID(IO_ARVALID), .RREADY(IO_RREADY), .AWADDR(IO_AWADDR), .ARADDR(IO_ARADDR),
-    .WDATA(IO_WDATA), .tb_ReadValue(IO_tb_ReadValue),
-    .qr_Idle(IO_qr_Idle), .qr_ARValid(IO_qr_ARValid), .qr_ReadReady(IO_qr_ReadReady),
-    .qr_Read(IO_qr_Read), .qw_Idle(IO_qw_Idle), .qw_AWValid(IO_qw_AWValid),
-    .qw_GetDataToWrite(IO_qw_GetDataToWrite), .qw_Write(IO_qw_Write),
-    .qw_WaitForResponse(IO_qw_WaitForResponse)
+    .WDATA(IO_WDATA), .ReadValue(IO_ReadValue)
 );
 
 endmodule

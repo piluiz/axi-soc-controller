@@ -51,12 +51,12 @@ module unit_scheduler #(
     output [17:0] AWADDR,
     output [21:0] ARADDR,
     output [7:0]  WDATA,
-    output [7:0]  tb_ReadValue,
-
-    // Master state outputs (for the testbench)
-    output qr_Idle, qr_ARValid, qr_ReadReady, qr_Read,
-    output qw_Idle, qw_AWValid, qw_GetDataToWrite, qw_Write, qw_WaitForResponse
+    output [7:0]  ReadValue          // Most recent value read
 );
+
+// Master state (one-hot). Only the address-phase bits are used here.
+wire qr_Idle, qr_ARValid, qr_ReadReady, qr_Read;
+wire qw_Idle, qw_AWValid, qw_GetDataToWrite, qw_Write, qw_WaitForResponse;
 
 localparam FINDTASK = 2'b01, PROCESSTASK = 2'b10;
 
@@ -205,7 +205,7 @@ master_axi master (
     .tb_ReadAddress(ReadAddress),
     .tb_NumAddressesToRead(NumAddressesToRead),
     .tb_ReadTransactionID(ReadTransactionID),
-    .tb_ReadValue(tb_ReadValue),
+    .tb_ReadValue(ReadValue),
     .tb_WriteRequest(WriteRequest),
     .tb_WriteAddress(WriteAddress),
     .tb_WriteTransactionID(WriteTransactionID),

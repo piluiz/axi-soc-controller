@@ -52,14 +52,8 @@ reg dependency_test;
 // ---------------------------------------------------------------------------
 
 wire FIFO_IsEmpty;
-wire ALU_qr_Idle, ALU_qr_ARValid, ALU_qr_ReadReady, ALU_qr_Read, ALU_qw_Idle, ALU_qw_AWValid,
-     ALU_qw_GetDataToWrite, ALU_qw_Write, ALU_qw_WaitForResponse, Memory_qr_Idle, Memory_qr_ARValid,
-     Memory_qr_ReadReady, Memory_qr_Read, Memory_qw_Idle, Memory_qw_AWValid,
-     Memory_qw_GetDataToWrite, Memory_qw_Write, Memory_qw_WaitForResponse, IO_qr_Idle,
-     IO_qr_ARValid, IO_qr_ReadReady, IO_qr_Read, IO_qw_Idle, IO_qw_AWValid, IO_qw_GetDataToWrite,
-     IO_qw_Write, IO_qw_WaitForResponse, ALU_Q_FINDTASK, ALU_Q_PROCESSTASK, FIFO_Q_FULL,
-     FIFO_Q_GOTVALUE, FIFO_Q_NOTFULL, MEMORY_Q_FINDTASK, MEMORY_Q_PROCESSTASK, IO_Q_FINDTASK,
-     IO_Q_PROCESSTASK;
+wire ALU_Q_FINDTASK, ALU_Q_PROCESSTASK, MEMORY_Q_FINDTASK, MEMORY_Q_PROCESSTASK, IO_Q_FINDTASK,
+     IO_Q_PROCESSTASK, FIFO_Q_FULL, FIFO_Q_GOTVALUE, FIFO_Q_NOTFULL;
 
 wire ALU_AWVALID, ALU_WLAST, ALU_WVALID, ALU_BREADY, ALU_ARVALID, ALU_RREADY;
 wire [17:0] ALU_AWADDR;
@@ -89,55 +83,38 @@ wire [7:0] IO_RDATA, IO_tb_WriteValue, IO_tb_WriteAddress;
 wire [9:0] IO_tb_WriteTransactionID;
 
 controller controller_uut(
-    .clk(clk), .reset(reset), .dependency_test(dependency_test),
+    // Clock and reset
+    .clk(clk), .reset(reset),
+    // Instruction interface
     .tb_IsNewInstruction(tb_IsNewInstruction), .tb_NewInstruction(tb_NewInstruction),
-    .FIFO_IsEmpty(FIFO_IsEmpty), .FIFO_Q_FULL(FIFO_Q_FULL), .FIFO_Q_GOTVALUE(FIFO_Q_GOTVALUE),
-    .FIFO_Q_NOTFULL(FIFO_Q_NOTFULL),
+    .dependency_test(dependency_test),
+    // Queue status
+    .FIFO_Q_NOTFULL(FIFO_Q_NOTFULL), .FIFO_Q_GOTVALUE(FIFO_Q_GOTVALUE), .FIFO_Q_FULL(FIFO_Q_FULL),
+    .FIFO_IsEmpty(FIFO_IsEmpty),
+    // Scheduler state per unit
     .ALU_Q_FINDTASK(ALU_Q_FINDTASK), .ALU_Q_PROCESSTASK(ALU_Q_PROCESSTASK),
     .MEMORY_Q_FINDTASK(MEMORY_Q_FINDTASK), .MEMORY_Q_PROCESSTASK(MEMORY_Q_PROCESSTASK),
     .IO_Q_FINDTASK(IO_Q_FINDTASK), .IO_Q_PROCESSTASK(IO_Q_PROCESSTASK),
-
-    .ALU_AWVALID(ALU_AWVALID), .ALU_WLAST(ALU_WLAST), .ALU_WVALID(ALU_WVALID),
-    .ALU_BREADY(ALU_BREADY), .ALU_ARVALID(ALU_ARVALID), .ALU_RREADY(ALU_RREADY),
-    .ALU_qr_Idle(ALU_qr_Idle), .ALU_qr_ARValid(ALU_qr_ARValid), .ALU_qr_ReadReady(ALU_qr_ReadReady),
-    .ALU_qr_Read(ALU_qr_Read), .ALU_qw_Idle(ALU_qw_Idle), .ALU_qw_AWValid(ALU_qw_AWValid),
-    .ALU_qw_GetDataToWrite(ALU_qw_GetDataToWrite), .ALU_qw_Write(ALU_qw_Write),
-    .ALU_qw_WaitForResponse(ALU_qw_WaitForResponse), .ALU_AWADDR(ALU_AWADDR),
-    .ALU_ARADDR(ALU_ARADDR), .ALU_WDATA(ALU_WDATA), .ALU_tb_ReadValue(ALU_ReadValue),
-    .ALU_ARREADY(ALU_ARREADY), .ALU_RVALID(ALU_RVALID), .ALU_AWREADY(ALU_AWREADY),
-    .ALU_WREADY(ALU_WREADY), .ALU_BRESP(ALU_BRESP), .ALU_BVALID(ALU_BVALID),
-    .ALU_tb_LastWrite(ALU_tb_LastWrite), .ALU_RLAST(ALU_RLAST), .ALU_RDATA(ALU_RDATA),
-    .ALU_tb_WriteValue(ALU_tb_WriteValue), .ALU_tb_WriteAddress(ALU_tb_WriteAddress),
-    .ALU_tb_WriteTransactionID(ALU_tb_WriteTransactionID),
-
-    .Memory_AWVALID(Memory_AWVALID), .Memory_WLAST(Memory_WLAST), .Memory_WVALID(Memory_WVALID),
-    .Memory_BREADY(Memory_BREADY), .Memory_ARVALID(Memory_ARVALID),
-    .Memory_RREADY(Memory_RREADY), .Memory_qr_Idle(Memory_qr_Idle),
-    .Memory_qr_ARValid(Memory_qr_ARValid), .Memory_qr_ReadReady(Memory_qr_ReadReady),
-    .Memory_qr_Read(Memory_qr_Read), .Memory_qw_Idle(Memory_qw_Idle),
-    .Memory_qw_AWValid(Memory_qw_AWValid), .Memory_qw_GetDataToWrite(Memory_qw_GetDataToWrite),
-    .Memory_qw_Write(Memory_qw_Write), .Memory_qw_WaitForResponse(Memory_qw_WaitForResponse),
-    .Memory_AWADDR(Memory_AWADDR), .Memory_ARADDR(Memory_ARADDR), .Memory_WDATA(Memory_WDATA),
-    .Memory_tb_ReadValue(Memory_ReadValue), .Memory_ARREADY(Memory_ARREADY),
-    .Memory_RVALID(Memory_RVALID), .Memory_AWREADY(Memory_AWREADY),
-    .Memory_WREADY(Memory_WREADY), .Memory_BRESP(Memory_BRESP), .Memory_BVALID(Memory_BVALID),
-    .Memory_tb_LastWrite(Memory_tb_LastWrite), .Memory_RLAST(Memory_RLAST),
-    .Memory_RDATA(Memory_RDATA), .Memory_tb_WriteValue(Memory_tb_WriteValue),
-    .Memory_tb_WriteAddress(Memory_tb_WriteAddress),
-    .Memory_tb_WriteTransactionID(Memory_tb_WriteTransactionID),
-
-    .IO_AWVALID(IO_AWVALID), .IO_WLAST(IO_WLAST), .IO_WVALID(IO_WVALID),
-    .IO_BREADY(IO_BREADY), .IO_ARVALID(IO_ARVALID), .IO_RREADY(IO_RREADY),
-    .IO_qr_Idle(IO_qr_Idle), .IO_qr_ARValid(IO_qr_ARValid), .IO_qr_ReadReady(IO_qr_ReadReady),
-    .IO_qr_Read(IO_qr_Read), .IO_qw_Idle(IO_qw_Idle), .IO_qw_AWValid(IO_qw_AWValid),
-    .IO_qw_GetDataToWrite(IO_qw_GetDataToWrite), .IO_qw_Write(IO_qw_Write),
-    .IO_qw_WaitForResponse(IO_qw_WaitForResponse), .IO_AWADDR(IO_AWADDR),
-    .IO_ARADDR(IO_ARADDR), .IO_WDATA(IO_WDATA), .IO_tb_ReadValue(IO_ReadValue),
-    .IO_ARREADY(IO_ARREADY), .IO_RVALID(IO_RVALID), .IO_AWREADY(IO_AWREADY),
-    .IO_WREADY(IO_WREADY), .IO_BRESP(IO_BRESP), .IO_BVALID(IO_BVALID),
-    .IO_tb_LastWrite(IO_tb_LastWrite), .IO_RLAST(IO_RLAST), .IO_RDATA(IO_RDATA),
-    .IO_tb_WriteValue(IO_tb_WriteValue), .IO_tb_WriteAddress(IO_tb_WriteAddress),
-    .IO_tb_WriteTransactionID(IO_tb_WriteTransactionID)
+    // ALU
+    .ALU_ARVALID(ALU_ARVALID), .ALU_ARREADY(ALU_ARREADY), .ALU_ARADDR(ALU_ARADDR),
+    .ALU_RVALID(ALU_RVALID), .ALU_RREADY(ALU_RREADY), .ALU_RDATA(ALU_RDATA), .ALU_RLAST(ALU_RLAST),
+    .ALU_AWVALID(ALU_AWVALID), .ALU_AWREADY(ALU_AWREADY), .ALU_AWADDR(ALU_AWADDR),
+    .ALU_WVALID(ALU_WVALID), .ALU_WREADY(ALU_WREADY), .ALU_WDATA(ALU_WDATA), .ALU_WLAST(ALU_WLAST),
+    .ALU_BVALID(ALU_BVALID), .ALU_BREADY(ALU_BREADY), .ALU_BRESP(ALU_BRESP),
+    .ALU_ReadValue(ALU_ReadValue),
+    // Memory
+    .Memory_ARVALID(Memory_ARVALID), .Memory_ARREADY(Memory_ARREADY), .Memory_ARADDR(Memory_ARADDR),
+    .Memory_RVALID(Memory_RVALID), .Memory_RREADY(Memory_RREADY), .Memory_RDATA(Memory_RDATA),
+    .Memory_RLAST(Memory_RLAST), .Memory_AWVALID(Memory_AWVALID), .Memory_AWREADY(Memory_AWREADY),
+    .Memory_AWADDR(Memory_AWADDR), .Memory_WVALID(Memory_WVALID), .Memory_WREADY(Memory_WREADY),
+    .Memory_WDATA(Memory_WDATA), .Memory_WLAST(Memory_WLAST), .Memory_BVALID(Memory_BVALID),
+    .Memory_BREADY(Memory_BREADY), .Memory_BRESP(Memory_BRESP), .Memory_ReadValue(Memory_ReadValue),
+    // I/O
+    .IO_ARVALID(IO_ARVALID), .IO_ARREADY(IO_ARREADY), .IO_ARADDR(IO_ARADDR), .IO_RVALID(IO_RVALID),
+    .IO_RREADY(IO_RREADY), .IO_RDATA(IO_RDATA), .IO_RLAST(IO_RLAST), .IO_AWVALID(IO_AWVALID),
+    .IO_AWREADY(IO_AWREADY), .IO_AWADDR(IO_AWADDR), .IO_WVALID(IO_WVALID), .IO_WREADY(IO_WREADY),
+    .IO_WDATA(IO_WDATA), .IO_WLAST(IO_WLAST), .IO_BVALID(IO_BVALID), .IO_BREADY(IO_BREADY),
+    .IO_BRESP(IO_BRESP), .IO_ReadValue(IO_ReadValue)
 );
 
 slave_axi #(.LATENCY(ALU_LAT)) ALU_slave(

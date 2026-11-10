@@ -70,13 +70,29 @@ The controller is written to synthesize, not just simulate:
 
 - **One writer for the buffer.** Only the queue logic writes the instruction buffer. A scheduler
   reports a finished task with a one-cycle `done` pulse and the entry's slot number.
-- **Shared, fixed-size ready check.** For each of the 16 queue positions, `ready` is "holds an
-  unfinished instruction, and no older unfinished instruction has the same ID". That is a fixed
-  16 x 16 grid of 10-bit ID comparators, computed once and shared by all three schedulers, since the
-  blocking rule doesn't depend on the unit.
-- **Priority encoder per unit.** Each `unit_scheduler` picks the oldest ready position whose unit
-  code matches its own. The module is instantiated three times with different `UNIT` and
-  `LATENCY` parameters.
+- **Dependency matrix, built on arrival.** An instruction's dependencies are fixed the moment it
+  enters the queue: it must wait for every older unfinished instruction with the same ID. So the
+  new ID is compared against the 16 slots once, and the matches are stored as one row of a 16 x 16
+  bit matrix (`waits_on`). Every cycle, `ready` for each slot is just "unfinished, and no slot in my
+  row is still unfinished". The result is shared by all three schedulers, since the blocking rule
+  doesn't depend on the unit. This is the same technique out-of-order CPU issue queues use.
+- **Entries stay in their slots.** Nothing is copied into age order. Each `unit_scheduler` builds a
+  16-bit vector of ready slots for its unit, rotates only that vector so the oldest entry comes
+  first, picks the lowest bit with a priority encoder, and converts the result back to a slot. The
+  module is instantiated three times with a different `UNIT` parameter.
+
+Yosys generic cell counts (`synth; stat`):
+
+| Module | Cells |
+|---|---|
+| `controller` (with three schedulers and masters) | 5,356 |
+| `master_axi` | 179 |
+| `slave_axi` (256-byte memory in flip-flops) | 7,706 |
+
+An earlier version rotated the whole 480-bit buffer into age order every cycle and compared all
+pairs of IDs in a 16 x 16 grid. It needed **26,514 cells**. The dependency matrix and the 16-bit
+rotation brought that down to 5,356 (**-80%**), with identical behavior. The directed-test log is
+unchanged, as are the stress-test statistics.
 
 ### AXI-style interface
 
@@ -97,7 +113,7 @@ spec-compliant AXI4 or AXI4-Lite interface.
 
 | File           | Description                                              |
 |----------------|----------------------------------------------------------|
-| `Controller.v` | `controller`: instruction buffer, shared ready check, three `unit_scheduler` instances |
+| `Controller.v` | `controller`: instruction buffer, dependency matrix, three `unit_scheduler` instances |
 | `Scheduler.v`  | `unit_scheduler`: picks the oldest ready task for one unit and drives its `master_axi` |
 | `Master.v`     | `master_axi`: read and write state machines              |
 | `Slave.v`      | `slave_axi`: 256 x 8-bit memory with burst and overflow handling |
@@ -165,10 +181,12 @@ test failed on every one:
 | Ignore transaction IDs (no dependency check) | Ordering |
 | Pick the youngest ready task instead of the oldest | Priority |
 | Compare only 8 of the 10 ID bits | Priority |
-| Compare by buffer slot instead of age (breaks after the queue wraps) | Priority |
+| Pick by buffer slot instead of age (breaks after the queue wraps) | Priority |
+| Don't clear a reused slot's column in the dependency matrix | Priority |
+| Build dependency rows from finished or empty slots too | Deadlock |
 | One unit never reports its tasks done | Started twice |
 | Finish a read before its data arrives | Data |
-| Retire the head of the queue without checking it's done | Priority |
+| Retire the head of the queue without checking it's done | Bookkeeping |
 
 ### Directed tests
 

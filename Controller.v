@@ -17,8 +17,12 @@
  * Structure (synthesizable):
  *   - This module is the only writer of the instruction buffer. Schedulers
  *     report completion with a done pulse and slot number.
- *   - The "ready" check is a fixed 16 x 16 comparison of transaction IDs,
- *     computed once and shared by all three schedulers.
+ *   - Dependencies are found once, when an instruction arrives: it is
+ *     compared against the 16 slots and the matches are stored as one row of
+ *     a 16 x 16 dependency matrix. The "ready" check is then just an AND of
+ *     each row with the unfinished bits, shared by all three schedulers.
+ *   - Entries stay in their slots. Only the 16-bit candidate vector inside
+ *     each scheduler is rotated into age order to pick the oldest.
  *   - The head of the queue retires one completed entry per cycle.
  *
  * The FIFO_Q_* outputs tell the testbench when it can send another instruction.
@@ -118,15 +122,22 @@ module controller (
 
 // ---------------------------------------------------------------------------
 // Instruction buffer: 16 entries, written only by this module
+//
+// Everything below is indexed by buffer slot; nothing is rotated into age
+// order. done_bits[s] is 1 when slot s holds no unfinished instruction (it is
+// empty, or its task has completed), so reset sets every bit.
 // ---------------------------------------------------------------------------
 
-reg [29:0] buffer [0:15];
-reg [15:0] done_bits;        // done_bits[s]: the entry in slot s has completed
-reg [4:0]  read_pointer;     // (n+1)-bit pointers: the extra bit tells full from empty
-reg [4:0]  write_pointer;
+reg [29:0]  buffer [0:15];
+reg [15:0]  done_bits;       // done_bits[s]: slot s has no unfinished instruction
+reg [255:0] waits_on;        // waits_on[p*16 + s]: slot p must wait for slot s
+reg [4:0]   read_pointer;    // (n+1)-bit pointers: the extra bit tells full from empty
+reg [4:0]   write_pointer;
 
-wire [4:0] count = write_pointer - read_pointer;   // Entries in the queue (0..16)
-wire [3:0] head  = read_pointer[3:0];
+wire [4:0]  count  = write_pointer - read_pointer;   // Entries in the queue (0..16)
+wire [3:0]  head   = read_pointer[3:0];              // Slot of the oldest entry
+wire [3:0]  tail   = write_pointer[3:0];             // Slot the next entry goes into
+wire [15:0] unfinished = ~done_bits;
 
 assign FIFO_IsEmpty = (count == 5'd0);
 
@@ -134,9 +145,13 @@ localparam FIFO_NOTFULL = 3'b001, FIFO_GOTVALUE = 3'b010, FIFO_FULL = 3'b100;
 reg [2:0] FIFO_State;
 assign {FIFO_Q_FULL, FIFO_Q_GOTVALUE, FIFO_Q_NOTFULL} = FIFO_State;
 
+wire accept = (FIFO_State == FIFO_NOTFULL) && tb_IsNewInstruction && count < 5'd16;
+
 // Completion reports from the schedulers
 wire       alu_done, mem_done, io_done;
 wire [3:0] alu_done_slot, mem_done_slot, io_done_slot;
+
+integer p, s;
 
 always @ (posedge clk, posedge reset)
 begin
@@ -144,7 +159,8 @@ begin
     begin
         read_pointer  <= 5'd0;
         write_pointer <= 5'd0;
-        done_bits     <= 16'd0;
+        done_bits     <= 16'hFFFF;
+        waits_on      <= 256'd0;
         FIFO_State    <= FIFO_NOTFULL;
     end
     else
@@ -158,16 +174,31 @@ begin
         if (count != 5'd0 && done_bits[head])
             read_pointer <= read_pointer + 5'd1;
 
-        // Accept new instructions from the testbench
+        // Accept a new instruction into slot `tail`
+        if (accept)
+        begin
+            buffer[tail]    <= {tb_NewInstruction[29:1], 1'b0};
+            done_bits[tail] <= 1'b0;
+            write_pointer   <= write_pointer + 5'd1;
+
+            // Dependency matrix. Every unfinished entry is older than the new
+            // one, so the new entry waits on each of them that has the same
+            // transaction ID. These 16 comparisons happen once, here, instead
+            // of on every cycle. The slot's old column is cleared so that no
+            // entry still in the queue waits on the newcomer.
+            for (p = 0; p < 16; p = p + 1)
+                for (s = 0; s < 16; s = s + 1)
+                    if (p == tail)
+                        waits_on[p*16 + s] <= unfinished[s] &&
+                                              buffer[s][10:1] == tb_NewInstruction[10:1];
+                    else if (s == tail)
+                        waits_on[p*16 + s] <= 1'b0;
+        end
+
         case (FIFO_State)
             FIFO_NOTFULL:
-                if (tb_IsNewInstruction && count < 5'd16)
-                begin
-                    buffer[write_pointer[3:0]]    <= {tb_NewInstruction[29:1], 1'b0};
-                    done_bits[write_pointer[3:0]] <= 1'b0;
-                    write_pointer                 <= write_pointer + 5'd1;
-                    FIFO_State                    <= FIFO_GOTVALUE;
-                end
+                if (accept)
+                    FIFO_State <= FIFO_GOTVALUE;
 
             FIFO_GOTVALUE:
                 FIFO_State <= (count < 5'd16) ? FIFO_NOTFULL : FIFO_FULL;
@@ -186,33 +217,21 @@ end
 // ---------------------------------------------------------------------------
 // Ready check, shared by all schedulers
 //
-// Positions are numbered by age: position 0 is the oldest entry (slot `head`).
-// Position k is ready if it holds an unfinished instruction and no older
-// unfinished instruction has the same transaction ID. Both loops have fixed
-// bounds, so this synthesizes to a 16 x 16 grid of ID comparators.
+// Slot p may issue if it holds an unfinished instruction and none of the
+// entries it waits on is still unfinished. A row only ever names older
+// entries, and a slot's column is cleared when the slot is reused, so no age
+// comparison is needed here.
 // ---------------------------------------------------------------------------
 
-reg [16*30-1:0] entries;      // Instruction at each position
-reg [15:0]      unfinished;   // Position holds an instruction that hasn't completed
-reg [15:0]      ready;        // Position may issue now
-integer p, q;
+reg [16*30-1:0] entries;      // Instruction in each slot
+reg [15:0]      ready;        // Slot may issue now
 
 always @*
-begin
     for (p = 0; p < 16; p = p + 1)
     begin
-        entries[p*30 +: 30] = buffer[(head + p) & 4'hF];
-        unfinished[p]       = (p < count) && !done_bits[(head + p) & 4'hF];
+        entries[p*30 +: 30] = buffer[p];
+        ready[p] = unfinished[p] && !(|(waits_on[p*16 +: 16] & unfinished));
     end
-
-    for (p = 0; p < 16; p = p + 1)
-    begin
-        ready[p] = unfinished[p];
-        for (q = 0; q < 16; q = q + 1)
-            if (q < p && unfinished[q] && entries[q*30 + 1 +: 10] == entries[p*30 + 1 +: 10])
-                ready[p] = 1'b0;
-    end
-end
 
 
 // ---------------------------------------------------------------------------

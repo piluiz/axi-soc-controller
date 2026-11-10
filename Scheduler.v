@@ -30,10 +30,10 @@ module unit_scheduler #(
     input reset,
     input dependency_test,            // Print task start/complete messages
 
-    // View of the queue in age order: position 0 is the oldest entry
-    input [16*30-1:0] entries,        // Instruction at each position
-    input [15:0]      ready,          // Position may issue now
-    input [3:0]       read_ptr,       // Buffer slot of position 0
+    // View of the queue, indexed by buffer slot
+    input [16*30-1:0] entries,        // Instruction in each slot
+    input [15:0]      ready,          // Slot may issue now
+    input [3:0]       read_ptr,       // Slot of the oldest entry
 
     // Completion report to the controller
     output            done,
@@ -79,24 +79,44 @@ reg [7:0] ReadAddress, WriteAddress, WriteValue;
 reg [3:0] NumAddressesToRead;
 reg [9:0] ReadTransactionID, WriteTransactionID;
 
-// Priority encoder: the lowest (oldest) ready position addressed to this unit.
-// Scanning from 15 down to 0 lets the oldest match win. The loop has a fixed
-// bound, so it synthesizes to 16 copies of the comparison.
-reg       found;
-reg [3:0] pick;
+// Oldest-first pick. Candidates are found in slot order, then only this
+// 16-bit vector is rotated so that bit 0 is the oldest entry (slot read_ptr).
+// A priority encoder finds the lowest (oldest) candidate, and adding read_ptr
+// turns its age back into a slot. Scanning from 15 down to 0 lets the oldest
+// match win. The loops have fixed bounds, so they synthesize to plain logic.
+reg [15:0] candidate;     // By slot: ready and addressed to this unit
+reg [15:0] by_age;        // candidate rotated: bit k is the k-th oldest entry
+reg        found;
+reg [3:0]  age;
 integer k;
 
 always @* begin
+    for (k = 0; k < 16; k = k + 1)
+        candidate[k] = ready[k] && entries[k*30 + 12 +: 2] == UNIT;
+
+    by_age = {candidate, candidate} >> read_ptr;
+
     found = 1'b0;
-    pick  = 4'd0;
+    age   = 4'd0;
     for (k = 15; k >= 0; k = k - 1)
-        if (ready[k] && entries[k*30 + 12 +: 2] == UNIT) begin
+        if (by_age[k]) begin
             found = 1'b1;
-            pick  = k;
+            age   = k;
         end
 end
 
-wire [29:0] pick_entry = entries[pick*30 +: 30];
+wire [3:0] pick_slot = read_ptr + age;
+
+// The picked instruction: a 16-way select written out as a loop. (A variable
+// part-select, entries[pick_slot*30 +: 30], synthesizes to a much larger
+// 480-bit shifter.)
+reg [29:0] pick_entry;
+always @* begin
+    pick_entry = 30'd0;
+    for (k = 0; k < 16; k = k + 1)
+        if (pick_slot == k)
+            pick_entry = entries[k*30 +: 30];
+end
 
 always @(posedge clk, posedge reset)
 begin
@@ -122,7 +142,7 @@ begin
                 if (found)
                 begin
                     state      <= PROCESSTASK;
-                    slot       <= read_ptr + pick;
+                    slot       <= pick_slot;
                     task_entry <= pick_entry;
 
                     if (pick_entry[11] == 1'b0)    // Read
